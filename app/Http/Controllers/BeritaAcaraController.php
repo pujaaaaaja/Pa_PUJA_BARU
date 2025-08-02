@@ -6,48 +6,79 @@ use App\Models\BeritaAcara;
 use App\Http\Requests\StoreBeritaAcaraRequest;
 use App\Http\Requests\UpdateBeritaAcaraRequest;
 use App\Models\Kegiatan;
-use App\Enums\TahapanKegiatan;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Validation\Rule;
-use Inertia\Inertia;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class BeritaAcaraController extends Controller
 {
     /**
-     * Store a newly created resource in storage.
-     * Aksi untuk Pegawai (Penyelesaian Kegiatan).
+     * Display a listing of the resource.
+     */
+    public function index()
+    {
+        //
+    }
+
+    /**
+     * Show the form for creating a new resource.
+     */
+    public function create()
+    {
+        //
+    }
+
+    /**
+     * Menyimpan laporan akhir (Berita Acara) dan menyelesaikan kegiatan.
+     *
+     * @param  \App\Http\Requests\StoreBeritaAcaraRequest  $request
+     * @param  \App\Models\Kegiatan  $kegiatan
+     * @return \Illuminate\Http\RedirectResponse
      */
     public function store(StoreBeritaAcaraRequest $request, Kegiatan $kegiatan)
     {
-        $this->authorize('update', $kegiatan); // Memastikan pegawai adalah anggota tim
+        // Otorisasi untuk memastikan pengguna adalah bagian dari tim
+        $this->authorize('update', $kegiatan);
 
-        // Validasi bahwa kegiatan berada pada tahap yang benar
-        if ($kegiatan->tahapan !== TahapanKegiatan::SELESAI) {
-            return back()->with('error', 'Kegiatan ini belum siap untuk diselesaikan.');
+        // Validasi tahapan
+        if ($kegiatan->tahapan !== 'penyelesaian') {
+            return back()->with('error', 'Tidak dapat menyelesaikan kegiatan pada tahapan ini.');
         }
 
-        $data = $request->validated();
-        
-        // Validasi tambahan untuk status akhir
-        $request->validate([
-            'status_akhir' => ['required', Rule::in(['selesai', 'ditunda', 'dibatalkan'])]
-        ]);
+        // Data yang divalidasi datang dari StoreBeritaAcaraRequest
+        $validated = $request->validated();
 
-        $berita_acara_path = $data['file_path']->store('berita_acara', 'public');
+        try {
+            DB::beginTransaction();
 
-        $kegiatan->beritaAcaras()->create([
-            'file_path' => $berita_acara_path,
-            'user_id' => Auth::id(),
-            'tanggal_penyelesaian' => now(),
-        ]);
+            // Simpan file Berita Acara
+            $path = $request->file('file_berita_acara')->store('berita_acara', 'public');
 
-        // Update tahapan dan status akhir kegiatan
-        $kegiatan->tahapan = TahapanKegiatan::SELESAI;
-        $kegiatan->status_akhir = $request->input('status_akhir');
-        $kegiatan->save();
+            // Buat record Berita Acara
+            BeritaAcara::create([
+                'kegiatan_id' => $kegiatan->id,
+                'path' => $path,
+                'user_id' => Auth::id(),
+            ]);
 
-        // TODO: Kirim notifikasi ke Kadis dan Kabid bahwa kegiatan telah selesai
+            // Update status akhir dan tahapan kegiatan
+            $kegiatan->update([
+                'tahapan' => 'selesai',
+                'status_akhir' => $validated['status_akhir'],
+                'detail_akhir_kegiatan' => $validated['detail_akhir_kegiatan'],
+                'tanggal_penyelesaian' => now(),
+            ]);
 
-        return to_route('kegiatan.myIndex')->with('success', 'Laporan akhir berhasil diunggah dan kegiatan telah diselesaikan.');
+            DB::commit();
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error("Gagal menyelesaikan kegiatan: " . $e->getMessage());
+            return back()->with('error', 'Terjadi kesalahan saat menyimpan data penyelesaian.');
+        }
+
+        return redirect()->route('kegiatan.myIndex', ['tahapan' => 'selesai'])->with('success', 'Kegiatan berhasil diselesaikan.');
     }
+
+    // ... sisa fungsi lainnya
 }

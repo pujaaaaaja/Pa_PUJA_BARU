@@ -2,161 +2,143 @@
 
 namespace App\Http\Controllers;
 
-use App\Enums\TahapanKegiatan;
+use App\Models\DokumentasiKegiatan;
 use App\Http\Requests\StoreDokumentasiKegiatanRequest;
-use App\Http\Resources\KegiatanResource;
 use App\Models\Kegiatan;
+use App\Models\Foto;
+use App\Models\Kontrak;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
-use Inertia\Inertia;
+use Illuminate\Support\Facades\Log;
 
 class DokumentasiKegiatanController extends Controller
 {
     /**
-     * Menampilkan form untuk membuat dokumentasi baru.
-     * Metode ini digunakan untuk menampilkan form pada tahapan yang sesuai.
+     * Mengonfirmasi kehadiran pegawai dan melanjutkan tahapan kegiatan.
+     *
+     * @param  \App\Models\Kegiatan  $kegiatan
+     * @return \Illuminate\Http\RedirectResponse
      */
-    public function create(Kegiatan $kegiatan)
+    public function confirmKehadiran(Kegiatan $kegiatan)
     {
-        // Otorisasi: Memastikan pengguna yang login boleh membuat dokumentasi untuk kegiatan ini.
-        $this->authorize('update', $kegiatan);
+        // Otorisasi: Pastikan pegawai adalah bagian dari tim kegiatan ini
+        $user = Auth::user();
+        if (!$kegiatan->tim->pegawai->contains($user->id)) {
+            return back()->with('error', 'Anda tidak memiliki akses untuk kegiatan ini.');
+        }
 
-        // Mengembalikan view Inertia dengan data kegiatan yang diperlukan.
-        return Inertia::render('Dokumentasi/Create', [
-            'kegiatan' => new KegiatanResource($kegiatan)
-        ]);
+        // Validasi: Pastikan tahapan saat ini adalah 'perjalanan_dinas'
+        if ($kegiatan->tahapan !== 'perjalanan_dinas') {
+            return back()->with('error', 'Aksi tidak dapat dilakukan pada tahapan ini.');
+        }
+
+        // Update tahapan kegiatan
+        $kegiatan->tahapan = 'dokumentasi_observasi';
+        $kegiatan->save();
+
+        return redirect()->route('kegiatan.myIndex', ['tahapan' => 'dokumentasi_observasi'])->with('success', 'Kehadiran berhasil dikonfirmasi.');
     }
 
     /**
-     * Menyimpan dokumentasi observasi baru.
-     * Aksi untuk Pegawai.
+     * Menyimpan dokumentasi observasi baru (catatan dan foto).
+     *
+     * @param  \App\Http\Requests\StoreDokumentasiKegiatanRequest  $request
+     * @param  \App\Models\Kegiatan  $kegiatan
+     * @return \Illuminate\Http\RedirectResponse
      */
-    public function storeObservasi(Request $request, Kegiatan $kegiatan)
+    public function storeObservasi(StoreDokumentasiKegiatanRequest $request, Kegiatan $kegiatan)
     {
-        $this->authorize('update', $kegiatan); // Memastikan pegawai adalah anggota tim
-
-        // Validasi bahwa kegiatan berada pada tahap yang benar
-        if ($kegiatan->tahapan !== TahapanKegiatan::PERJALANAN_DINAS) {
-            return back()->with('error', 'Tidak dapat merekam observasi pada tahapan ini.');
-        }
-
-        $data = $request->validate([
-            'catatan_kebutuhan' => 'required|string',
-            'detail_pelaksanaan' => 'required|string',
-            'fotos' => 'required|array',
-            'fotos.*' => 'required|file|image|max:2048',
-        ]);
-
         try {
             DB::beginTransaction();
 
-            // PERBAIKAN: Menggunakan nama relasi yang benar ('dokumentasi').
-            $dokumentasi = $kegiatan->dokumentasi()->create([
-                'user_id' => Auth::id(),
+            if ($kegiatan->tahapan !== 'dokumentasi_observasi') {
+                return back()->with('error', 'Aksi tidak dapat dilakukan pada tahapan ini.');
+            }
+
+            $dokumentasi = DokumentasiKegiatan::create([
+                'kegiatan_id' => $kegiatan->id,
+                'catatan_kebutuhan' => $request->catatan_kebutuhan,
+                'detail_pelaksanaan' => $request->detail_pelaksanaan,
                 'tipe' => 'observasi',
-                'catatan_kebutuhan' => $data['catatan_kebutuhan'],
-                'detail_pelaksanaan' => $data['detail_pelaksanaan'],
-                'tanggal_dokumentasi' => now(),
-            ]);
-
-            // Simpan foto-foto dokumentasi
-            if ($request->hasFile('fotos')) {
-                foreach ($request->file('fotos') as $file) {
-                    $path = $file->store('dokumentasi_foto', 'public');
-                    $dokumentasi->fotos()->create([
-                        'path' => $path,
-                        'user_id' => Auth::id(),
-                    ]);
-                }
-            }
-
-            // Setelah dokumentasi observasi selesai, update tahapan kegiatan
-            $kegiatan->tahapan = TahapanKegiatan::DOKUMENTASI_OBSERVASI;
-            $kegiatan->save();
-
-            DB::commit();
-
-        } catch (\Exception $e) {
-            DB::rollBack();
-            return back()->with('error', 'Terjadi kesalahan saat menyimpan data: ' . $e->getMessage());
-        }
-
-        return to_route('kegiatan.myIndex')->with('success', 'Dokumentasi observasi berhasil direkam.');
-    }
-
-    /**
-     * Menyimpan dokumentasi penyerahan baru.
-     * Aksi untuk Pegawai.
-     */
-    public function storePenyerahan(Request $request, Kegiatan $kegiatan)
-    {
-        $this->authorize('update', $kegiatan); // Memastikan pegawai adalah anggota tim
-
-        // Validasi bahwa kegiatan berada pada tahap yang benar
-        if ($kegiatan->tahapan !== TahapanKegiatan::DOKUMENTASI_PENYERAHAN) {
-            return back()->with('error', 'Tidak dapat merekam penyerahan pada tahapan ini.');
-        }
-
-        $data = $request->validate([
-            'nama_dokumentasi' => 'required|string',
-            'kontrak_path' => 'nullable|file|mimes:pdf,doc,docx|max:2048',
-            'fotos' => 'nullable|array',
-            'fotos.*' => 'nullable|file|image|max:2048',
-        ]);
-
-        try {
-            DB::beginTransaction();
-
-            // PERBAIKAN: Menggunakan nama relasi yang benar ('dokumentasi').
-            $dokumentasi = $kegiatan->dokumentasi()->create([
                 'user_id' => Auth::id(),
-                'tipe' => 'penyerahan',
-                'nama_dokumentasi' => $data['nama_dokumentasi'],
-                'tanggal_dokumentasi' => now(),
             ]);
 
-            // Simpan file kontrak jika ada
-            if ($request->hasFile('kontrak_path')) {
-                $path = $request->file('kontrak_path')->store('kontrak_pihak_ketiga', 'public');
-                $dokumentasi->kontraks()->create([
-                    'path' => $path,
-                    'user_id' => Auth::id(),
-                ]);
-            }
-
-            // Simpan foto-foto dokumentasi penyerahan
             if ($request->hasFile('fotos')) {
                 foreach ($request->file('fotos') as $file) {
-                    $path = $file->store('dokumentasi_foto_penyerahan', 'public');
-                    $dokumentasi->fotos()->create([
+                    $path = $file->store('dokumentasi_fotos', 'public');
+                    Foto::create([
+                        'dokumentasi_kegiatan_id' => $dokumentasi->id,
                         'path' => $path,
-                        'user_id' => Auth::id(),
                     ]);
                 }
             }
             
-            // PERBAIKAN: Update tahapan ke 'Penyelesaian' setelah penyerahan.
-            $kegiatan->tahapan = TahapanKegiatan::SELESAI;
+            $kegiatan->tahapan = 'menunggu_penyerahan';
+            $kegiatan->save();
+
+            DB::commit();
+
+            return redirect()->route('kegiatan.myIndex', ['tahapan' => 'menunggu_penyerahan'])->with('success', 'Dokumentasi observasi berhasil disimpan.');
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error("Gagal menyimpan dokumentasi observasi: " . $e->getMessage());
+            return back()->with('error', 'Terjadi kesalahan saat menyimpan data.');
+        }
+    }
+
+    /**
+     * Menyimpan dokumentasi penyerahan baru.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  \App\Models\Kegiatan  $kegiatan
+     * @return \Illuminate\Http\RedirectResponse
+     */
+    public function storePenyerahan(Request $request, Kegiatan $kegiatan)
+    {
+        $this->authorize('update', $kegiatan);
+
+        if ($kegiatan->tahapan !== 'menunggu_penyerahan') {
+            return back()->with('error', 'Tidak dapat merekam penyerahan pada tahapan ini.');
+        }
+
+        $request->validate([
+            'nama_dokumentasi' => 'required|string|max:255',
+            'file_sktl_penyerahan' => 'required|file|mimes:pdf,doc,docx|max:2048',
+            'file_kontrak' => 'nullable|file|mimes:pdf,doc,docx|max:2048',
+        ]);
+
+        try {
+            DB::beginTransaction();
+
+            $dokumentasi = $kegiatan->dokumentasiKegiatans()->create([
+                'user_id' => Auth::id(),
+                'tipe' => 'penyerahan',
+                'nama_dokumentasi' => $request->nama_dokumentasi,
+                'tanggal_dokumentasi' => now(),
+                'file_sktl_penyerahan' => $request->file('file_sktl_penyerahan')->store('sktl_penyerahan', 'public'),
+            ]);
+
+            if ($request->hasFile('file_kontrak')) {
+                Kontrak::create([
+                    'dokumentasi_kegiatan_id' => $dokumentasi->id,
+                    'path' => $request->file('file_kontrak')->store('kontrak_pihak_ketiga', 'public'),
+                    'user_id' => Auth::id(),
+                ]);
+            }
+
+            $kegiatan->tahapan = 'penyelesaian';
             $kegiatan->save();
 
             DB::commit();
 
         } catch (\Exception $e) {
             DB::rollBack();
-            return back()->with('error', 'Terjadi kesalahan saat menyimpan data: ' . $e->getMessage());
+            Log::error("Gagal menyimpan dokumentasi penyerahan: " . $e->getMessage());
+            return back()->with('error', 'Terjadi kesalahan saat menyimpan data penyerahan.');
         }
 
-        return to_route('kegiatan.myIndex')->with('success', 'Dokumentasi penyerahan berhasil direkam. Kegiatan siap untuk diselesaikan.');
-    }
-
-    /**
-     * Metode ini bisa diimplementasikan jika ada kebutuhan untuk menyimpan
-     * dokumentasi secara umum, namun saat ini tidak digunakan dalam alur utama.
-     */
-    public function store(StoreDokumentasiKegiatanRequest $request)
-    {
-        // Logika untuk menyimpan dokumentasi umum bisa ditambahkan di sini.
+        return redirect()->route('kegiatan.myIndex', ['tahapan' => 'penyelesaian'])->with('success', 'Dokumentasi penyerahan berhasil direkam.');
     }
 }

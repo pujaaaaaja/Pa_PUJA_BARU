@@ -2,58 +2,48 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Kegiatan;
 use App\Http\Resources\KegiatanResource;
+use App\Models\Kegiatan;
 use Inertia\Inertia;
 
 class ArsipController extends Controller
 {
     /**
-     * Display a listing of the archived resources.
+     * Menampilkan daftar kegiatan yang sudah diarsipkan (selesai).
      */
     public function index()
     {
-        $query = Kegiatan::query()
-            ->whereIn('tahapan', ['selesai', 'arsip']) // Menampilkan kegiatan yang sudah Selesai atau Diarsipkan
-            ->with(['proposal', 'tim', 'createdBy']);
-
-        if (request("nama_kegiatan")) {
-            $query->where("nama_kegiatan", "like", "%" . request("nama_kegiatan") . "%");
-        }
-
-        $kegiatans = $query->orderBy('tanggal_kegiatan', 'desc')
-            ->paginate(10)
-            ->onEachSide(1);
+        $kegiatans = Kegiatan::where('tahapan', 'selesai')
+            ->with('proposal', 'tim')
+            ->latest('updated_at')
+            ->paginate(10);
 
         return Inertia::render('Arsip/Index', [
             'kegiatans' => KegiatanResource::collection($kegiatans),
-            'queryParams' => request()->query() ?: null,
         ]);
     }
 
     /**
-     * Display the specified archived resource.
+     * Menampilkan detail lengkap dari satu kegiatan yang diarsipkan.
+     *
+     * @param \App\Models\Kegiatan $kegiatan
+     * @return \Inertia\Response
      */
     public function show(Kegiatan $kegiatan)
     {
-        // Memastikan hanya kegiatan yang sudah selesai yang bisa dilihat di arsip
-        if (!in_array($kegiatan->tahapan, ['selesai', 'arsip'])) {
-            abort(404);
-        }
-
-        // Eager load semua relasi yang dibutuhkan untuk halaman detail lengkap
+        // Eager load semua relasi yang dibutuhkan untuk halaman detail
         $kegiatan->load([
-            'proposal.pengusul',
-            'tim.users',
-            'createdBy',
-            'beritaAcaras',
+            'proposal.user', // Muat proposal beserta data pengusulnya
+            'tim.pegawai',   // Muat tim beserta data para pegawainya
             'dokumentasiKegiatans' => function ($query) {
-                $query->with(['fotos', 'kebutuhans', 'kontraks', 'user']);
-            }
+                // Muat semua dokumentasi beserta relasi spesifiknya
+                $query->with(['user', 'fotos', 'kontraks']);
+            },
+            'beritaAcaras.user' // Muat berita acara beserta data pengunggahnya
         ]);
 
         return Inertia::render('Arsip/Show', [
-            'kegiatan' => new KegiatanResource($kegiatan)
+            'kegiatan' => new KegiatanResource($kegiatan),
         ]);
     }
 }

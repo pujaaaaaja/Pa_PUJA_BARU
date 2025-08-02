@@ -3,7 +3,7 @@
 namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\Rule;
 
 class StoreBeritaAcaraRequest extends FormRequest
 {
@@ -12,7 +12,7 @@ class StoreBeritaAcaraRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        return Auth::check(); // Izinkan semua user yang sudah login
+        return true; // Otorisasi ditangani di controller
     }
 
     /**
@@ -23,14 +23,9 @@ class StoreBeritaAcaraRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'dokumentasi_kegiatan_id' => 'required|exists:dokumentasi_kegiatans,id',
-            'nama_berita_acara' => 'required|string|max:255',
-            'ket_berita_acara' => 'nullable|string',
-            'jumlah_saksi_berita_acara' => 'nullable|integer',
-            'posisi_peletakan' => 'nullable|string|max:255',
-            'jumlah' => 'nullable|integer',
-            'satuan' => 'nullable|string|max:255',
-            'kedalaman' => 'nullable|string|max:255',
+            'file_berita_acara' => 'required|file|mimes:pdf,doc,docx|max:2048',
+            'detail_akhir_kegiatan' => 'required|string',
+            'status_akhir' => ['required', Rule::in(['Selesai', 'Ditunda', 'Dibatalkan'])],
         ];
     }
 }

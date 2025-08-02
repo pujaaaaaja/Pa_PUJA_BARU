@@ -16,6 +16,40 @@ use Inertia\Inertia;
 
 class KegiatanController extends Controller
 {
+        /**
+     * Display a listing of the kegiatans for the current user.
+     */
+    public function myIndex()
+    {
+        $user = Auth::user();
+
+        // Query dasar untuk mengambil kegiatan yang terkait dengan user yang login
+        $query = Kegiatan::whereHas('tim.pegawai', function ($q) use ($user) {
+            $q->where('user_id', $user->id);
+        })->with(['proposal', 'tim']);
+
+        // Ambil nilai 'tahapan' dari query string di URL.
+        // Ini digunakan untuk fungsionalitas tab di frontend.
+        $tahapan = request('tahapan');
+
+        // Jika ada parameter 'tahapan', filter berdasarkan itu.
+        // Jika tidak, tampilkan tab default 'perjalanan_dinas'.
+        if ($tahapan) {
+            $query->where('tahapan', $tahapan);
+        } else {
+            $query->where('tahapan', 'perjalanan_dinas');
+        }
+
+        // Lakukan paginasi pada hasil query
+        $kegiatans = $query->latest()->paginate(10)->onEachSide(1);
+
+        // Render komponen React 'Kegiatan/MyIndex' dengan data yang diperlukan
+        return Inertia::render('Kegiatan/MyIndex', [
+            'kegiatans' => KegiatanResource::collection($kegiatans),
+            'queryParams' => request()->query() ?: null,
+            'success' => session('success'),
+        ]);
+    }
     /**
      * Display a listing of the resource.
      */
@@ -153,27 +187,5 @@ class KegiatanController extends Controller
         $kegiatan->delete();
         
         return to_route('kegiatan.index')->with('success', "Kegiatan \"$nama_kegiatan\" berhasil dihapus.");
-    }
-
-    /**
-     * Display a listing of the kegiatans for the current user.
-     */
-    public function myIndex()
-    {
-        $this->authorize('viewMyIndex', Kegiatan::class);
-
-        $user = Auth::user();
-        $query = Kegiatan::query()
-            ->whereHas('tim.pegawais', function ($q) use ($user) {
-                $q->where('user_id', $user->id);
-            })
-            ->with(['proposal', 'tim']);
-
-        $kegiatans = $query->orderBy('tanggal_kegiatan', 'desc')->paginate(10);
-
-        return Inertia::render('Kegiatan/MyIndex', [
-            'kegiatans' => KegiatanResource::collection($kegiatans),
-            'success' => session('success'),
-        ]);
     }
 }

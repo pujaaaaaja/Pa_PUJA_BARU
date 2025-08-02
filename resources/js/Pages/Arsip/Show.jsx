@@ -1,108 +1,110 @@
-import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
+import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout'; // Gunakan layout yang sesuai
 import { Head } from '@inertiajs/react';
 
-// Komponen kecil untuk menampilkan file yang bisa diunduh
-const FileLink = ({ label, path }) => {
-    if (!path) return null;
-    return (
-        <a href={path} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
-            {label}
-        </a>
-    );
-};
+// Komponen kecil untuk menampilkan baris detail
+const DetailRow = ({ label, value, isFile = false }) => (
+    <div className="grid grid-cols-3 gap-4 py-2 border-b">
+        <dt className="font-medium text-gray-600">{label}</dt>
+        <dd className="col-span-2 text-gray-800">
+            {isFile && value ? (
+                <a href={`/storage/${value}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                    Lihat Dokumen
+                </a>
+            ) : (
+                value || '-'
+            )}
+        </dd>
+    </div>
+);
 
-// Komponen untuk menampilkan satu bagian dari dokumentasi
-const DokumentasiSection = ({ doc }) => (
-    <div className="mt-4 p-4 border rounded-lg">
-        <h4 className="font-semibold text-md capitalize">{doc.tipe} oleh {doc.user.name}</h4>
-        <p className="text-sm text-gray-500">Tanggal: {doc.tanggal_dokumentasi}</p>
-        {doc.catatan_kebutuhan && <p><strong>Catatan Kebutuhan:</strong> {doc.catatan_kebutuhan}</p>}
-        {doc.detail_pelaksanaan && <p><strong>Detail Pelaksanaan:</strong> {doc.detail_pelaksanaan}</p>}
-        {doc.nama_dokumentasi && <p><strong>Nama Dokumentasi:</strong> {doc.nama_dokumentasi}</p>}
-        
-        <div className="mt-2">
-            {doc.fotos.length > 0 && (
-                <div>
-                    <strong>Foto:</strong>
-                    <div className="flex flex-wrap gap-2 mt-1">
-                        {doc.fotos.map(foto => (
-                            <a key={foto.id} href={foto.path} target="_blank" rel="noopener noreferrer">
-                                <img src={foto.path} alt="Foto Dokumentasi" className="w-24 h-24 object-cover rounded" />
-                            </a>
-                        ))}
-                    </div>
-                </div>
-            )}
-            {doc.kontraks.length > 0 && (
-                <div className="mt-2">
-                    <strong>Kontrak:</strong>
-                    <ul className="list-disc list-inside">
-                        {doc.kontraks.map(kontrak => (
-                            <li key={kontrak.id}><FileLink label="Lihat Kontrak" path={kontrak.path} /></li>
-                        ))}
-                    </ul>
-                </div>
-            )}
-        </div>
+// Komponen untuk menampilkan bagian/section
+const DetailSection = ({ title, children }) => (
+    <div className="mb-8">
+        <h3 className="text-xl font-semibold text-gray-800 border-b-2 border-blue-600 pb-2 mb-4">
+            {title}
+        </h3>
+        <dl>{children}</dl>
     </div>
 );
 
 export default function Show({ auth, kegiatan }) {
     const { data } = kegiatan;
 
+    // Pisahkan dokumentasi berdasarkan tipe untuk memudahkan rendering
+    const dokObservasi = data.dokumentasi_kegiatans.find(d => d.tipe === 'observasi');
+    const dokPenyerahan = data.dokumentasi_kegiatans.find(d => d.tipe === 'penyerahan');
+    const beritaAcara = data.berita_acaras[0]; // Asumsi hanya ada satu
+
     return (
         <AuthenticatedLayout
             user={auth.user}
-            header={<h2 className="font-semibold text-xl text-gray-800 leading-tight">Detail Arsip: {data.nama_kegiatan}</h2>}
+            header={<h2 className="font-semibold text-xl text-gray-800 leading-tight">Detail Arsip Kegiatan: {data.nama_kegiatan}</h2>}
         >
-            <Head title={`Arsip - ${data.nama_kegiatan}`} />
+            <Head title={"Detail Arsip " + data.nama_kegiatan} />
 
             <div className="py-12">
-                <div className="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
-                    {/* Informasi Proposal */}
-                    <div className="bg-white shadow-sm sm:rounded-lg p-6">
-                        <h3 className="text-lg font-bold">Informasi Proposal</h3>
-                        <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <p><strong>Nama Proposal:</strong> {data.proposal.nama_proposal}</p>
-                            <p><strong>Pengusul:</strong> {data.proposal.pengusul.name}</p>
-                            <p><strong>Tanggal Pengajuan:</strong> {data.proposal.tanggal_pengajuan}</p>
-                            <p><strong>Status:</strong> <span className="capitalize font-medium text-green-600">{data.proposal.status}</span></p>
-                            <div className="col-span-2"><strong>Tujuan:</strong> <p className="text-gray-600">{data.proposal.tujuan}</p></div>
-                            <FileLink label="Lihat Dokumen Proposal" path={data.proposal.dokumen_path} />
-                        </div>
-                    </div>
+                <div className="max-w-7xl mx-auto sm:px-6 lg:px-8">
+                    <div className="bg-white overflow-hidden shadow-sm sm:rounded-lg">
+                        <div className="p-6 md:p-8 text-gray-900">
 
-                    {/* Informasi Kegiatan & Tim */}
-                    <div className="bg-white shadow-sm sm:rounded-lg p-6">
-                        <h3 className="text-lg font-bold">Informasi Kegiatan</h3>
-                        <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <p><strong>Tanggal Kegiatan:</strong> {data.tanggal_kegiatan}</p>
-                            <p><strong>Dibuat oleh (Kabid):</strong> {data.createdBy.name}</p>
-                            <p><strong>Tim Pelaksana:</strong> {data.tim.nama_tim}</p>
-                            <div>
-                                <strong>Anggota Tim:</strong>
-                                <ul className="list-disc list-inside">
-                                    {data.tim.users.map(user => <li key={user.id}>{user.name}</li>)}
-                                </ul>
-                            </div>
-                            <FileLink label="Lihat SKTL Awal" path={data.sktl_path} />
-                            {data.sktl_penyerahan_path && <FileLink label="Lihat SKTL Penyerahan" path={data.sktl_penyerahan_path} />}
-                        </div>
-                    </div>
+                            {/* --- Bagian Detail Utama Kegiatan --- */}
+                            <DetailSection title="Informasi Umum Kegiatan">
+                                <DetailRow label="Nama Kegiatan" value={data.nama_kegiatan} />
+                                <DetailRow label="Deskripsi" value={data.deskripsi_kegiatan} />
+                                <DetailRow label="Tanggal Kegiatan" value={data.tanggal_kegiatan} />
+                                <DetailRow label="Tim Pelaksana" value={data.tim.nama_tim} />
+                                <DetailRow label="Anggota Tim" value={data.tim.pegawai.map(p => p.name).join(', ')} />
+                                <DetailRow label="File SKTL" value={data.file_sktl} isFile={true} />
+                            </DetailSection>
 
-                    {/* Dokumentasi */}
-                    <div className="bg-white shadow-sm sm:rounded-lg p-6">
-                        <h3 className="text-lg font-bold">Rangkaian Dokumentasi</h3>
-                        {data.dokumentasi_kegiatans.map(doc => <DokumentasiSection key={doc.id} doc={doc} />)}
-                    </div>
-                    
-                    {/* Hasil Akhir */}
-                    <div className="bg-white shadow-sm sm:rounded-lg p-6">
-                        <h3 className="text-lg font-bold">Penyelesaian Kegiatan</h3>
-                        <p><strong>Status Akhir:</strong> <span className="font-bold capitalize">{data.status_akhir}</span></p>
-                        {data.berita_acaras.length > 0 && (
-                             <FileLink label="Lihat Berita Acara" path={data.berita_acaras[0].file_path} />
-                        )}
+                            {/* --- Bagian Detail Proposal --- */}
+                            <DetailSection title="Detail Proposal Terkait">
+                                <DetailRow label="Nama Proposal" value={data.proposal.nama_proposal} />
+                                <DetailRow label="Pengusul" value={data.proposal.user.name} />
+                                <DetailRow label="Tujuan" value={data.proposal.tujuan} />
+                                <DetailRow label="Dokumen Proposal" value={data.proposal.dokumen_pendukung} isFile={true} />
+                            </DetailSection>
+
+                            {/* --- Bagian Dokumentasi Observasi --- */}
+                            {dokObservasi && (
+                                <DetailSection title="Dokumentasi Observasi">
+                                    <DetailRow label="Catatan Kebutuhan" value={dokObservasi.catatan_kebutuhan} />
+                                    <DetailRow label="Detail Pelaksanaan" value={dokObservasi.detail_pelaksanaan} />
+                                    <DetailRow label="Diunggah oleh" value={dokObservasi.user.name} />
+                                    <div className="py-2">
+                                        <p className="font-medium text-gray-600 mb-2">Foto-foto Observasi:</p>
+                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                            {dokObservasi.fotos.map(foto => (
+                                                <a key={foto.id} href={`/storage/${foto.path}`} target="_blank" rel="noopener noreferrer">
+                                                    <img src={`/storage/${foto.path}`} alt="Dokumentasi" className="rounded-lg shadow-md object-cover h-40 w-full"/>
+                                                </a>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </DetailSection>
+                            )}
+
+                             {/* --- Bagian Dokumentasi Penyerahan --- */}
+                            {dokPenyerahan && (
+                                <DetailSection title="Dokumentasi Penyerahan">
+                                    <DetailRow label="Nama Dokumentasi" value={dokPenyerahan.nama_dokumentasi} />
+                                    <DetailRow label="File SKTL Penyerahan" value={dokPenyerahan.file_sktl_penyerahan} isFile={true} />
+                                    <DetailRow label="Kontrak Pihak Ketiga" value={dokPenyerahan.kontraks[0]?.path} isFile={true} />
+                                    <DetailRow label="Diunggah oleh" value={dokPenyerahan.user.name} />
+                                </DetailSection>
+                            )}
+
+                            {/* --- Bagian Laporan Akhir --- */}
+                             {beritaAcara && (
+                                <DetailSection title="Laporan Akhir (Penyelesaian)">
+                                    <DetailRow label="Status Akhir" value={data.status_akhir} />
+                                    <DetailRow label="Tanggal Penyelesaian" value={data.tanggal_penyelesaian} />
+                                    <DetailRow label="Detail Akhir Kegiatan" value={data.detail_akhir_kegiatan} />
+                                    <DetailRow label="File Berita Acara" value={beritaAcara.path} isFile={true} />
+                                    <DetailRow label="Diunggah oleh" value={beritaAcara.user.name} />
+                                </DetailSection>
+                            )}
+                        </div>
                     </div>
                 </div>
             </div>

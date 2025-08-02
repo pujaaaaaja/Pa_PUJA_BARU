@@ -2,18 +2,56 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Kegiatan;
+use App\Models\Proposal;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
-use Inertia\Response;
 
 class DashboardController extends Controller
 {
     /**
-     * Display the user's dashboard.
+     * Menampilkan dashboard yang disesuaikan dengan peran pengguna.
      */
-    public function index(): Response
+    public function index()
     {
-        // Cukup render halaman Dashboard.jsx
-        return Inertia::render('Dashboard');
+        $user = Auth::user();
+        $stats = [];
+
+        // Kumpulkan statistik berdasarkan peran pengguna
+        if ($user->role === 'admin') {
+            $stats = [
+                'total_proposal' => Proposal::count(),
+                'total_kegiatan' => Kegiatan::count(),
+                'proposal_menunggu' => Proposal::where('status', 'pending')->count(),
+                'kegiatan_berjalan' => Kegiatan::where('tahapan', '!=', 'selesai')->count(),
+            ];
+        } elseif ($user->role === 'kadis') {
+            $stats['proposal_perlu_verifikasi'] = Proposal::where('status', 'pending')->count();
+        } elseif ($user->role === 'kabid') {
+            $stats['proposal_disetujui'] = Proposal::where('status', 'disetujui')->doesntHave('kegiatan')->count();
+            
+            // PERBAIKAN: Mengubah query untuk mencari kegiatan berdasarkan user_id di dalam relasi 'tim'.
+            // Tabel 'kegiatans' tidak memiliki 'user_id', tetapi tabel 'tims' memilikinya.
+            $stats['kegiatan_dibuat'] = Kegiatan::whereHas('tim', function ($query) use ($user) {
+                $query->where('user_id', $user->id);
+            })->count();
+
+        } elseif ($user->role === 'pengusul') {
+            $stats['proposal_diajukan'] = Proposal::where('user_id', $user->id)->count();
+            $stats['proposal_disetujui'] = Proposal::where('user_id', $user->id)->where('status', 'disetujui')->count();
+            $stats['proposal_ditolak'] = Proposal::where('user_id', $user->id)->where('status', 'ditolak')->count();
+        } elseif ($user->role === 'pegawai') {
+            $stats['tugas_aktif'] = Kegiatan::where('tahapan', '!=', 'selesai')
+                ->whereHas('tim.pegawai', fn($q) => $q->where('user_id', $user->id))
+                ->count();
+            $stats['tugas_selesai'] = Kegiatan::where('tahapan', 'selesai')
+                ->whereHas('tim.pegawai', fn($q) => $q->where('user_id', $user->id))
+                ->count();
+        }
+
+        return Inertia::render('Dashboard', [
+            'stats' => $stats
+        ]);
     }
 }
