@@ -9,40 +9,36 @@ use Illuminate\Auth\Access\Response;
 class KegiatanPolicy
 {
     /**
-     * Perform pre-authorization checks.
-     * Admin can do anything.
-     */
-    public function before(User $user, string $ability): bool|null
-    {
-        if ($user->hasRole('admin')) {
-            return true;
-        }
-
-        return null;
-    }
-
-    /**
      * Determine whether the user can view any models.
-     * Kabid can view the list of all kegiatans.
      */
     public function viewAny(User $user): bool
     {
-        return $user->hasRole('kabid');
+        return $user->hasRole('admin');
+    }
+
+    /**
+     * PERBAIKAN: Menambahkan metode baru untuk halaman "Kegiatan Saya".
+     * Metode ini secara eksplisit memberikan izin kepada 'pegawai'
+     * untuk mengakses halaman daftar tugas mereka.
+     */
+    public function viewMyIndex(User $user): bool
+    {
+        return $user->hasRole('pegawai');
     }
 
     /**
      * Determine whether the user can view the model.
-     * Kabid can view any, Pegawai can only view if they are on the team.
      */
     public function view(User $user, Kegiatan $kegiatan): bool
     {
-        if ($user->hasRole('kabid')) {
+        // 1. Izinkan admin atau kabid
+        if ($user->hasRole(['admin', 'kabid'])) {
             return true;
         }
 
+        // 2. Izinkan pegawai jika mereka adalah anggota tim dari kegiatan ini
         if ($user->hasRole('pegawai')) {
-            // Check if the user is a member of the assigned team.
-            return $kegiatan->tim->users->contains($user);
+            return $kegiatan->tim && $kegiatan->tim->pegawais->contains($user);
         }
 
         return false;
@@ -50,7 +46,6 @@ class KegiatanPolicy
 
     /**
      * Determine whether the user can create models.
-     * Only Kabid can create a new kegiatan.
      */
     public function create(User $user): bool
     {
@@ -59,51 +54,33 @@ class KegiatanPolicy
 
     /**
      * Determine whether the user can update the model.
-     * Kabid can update, and Pegawai can update if they are on the team (for submitting docs).
      */
-    public function update(User $user, Kegiatan $kegiatan = null): bool
+    public function update(User $user, Kegiatan $kegiatan): bool
     {
-        // Jika hanya memeriksa kemampuan umum (tanpa model spesifik)
-        if (is_null($kegiatan)) {
-            return $user->hasAnyRole(['kabid', 'pegawai']);
-        }
-
-        // Jika ada model spesifik, periksa peran dan kepemilikan
-        if ($user->hasRole('kabid')) {
-            return true;
-        }
-
-        if ($user->hasRole('pegawai')) {
-            // Pegawai can perform actions (like submitting documents) on their assigned kegiatan.
-            return $kegiatan->tim->users->contains($user);
-        }
-
-        return false;
+        return $user->hasRole('pegawai');
     }
 
     /**
      * Determine whether the user can delete the model.
-     * Deleting should be a very restricted action.
      */
-    public function delete(User $user, Kegiatan $kegiatan = null): bool
+    public function delete(User $user, Kegiatan $kegiatan): bool
     {
-        // Hanya admin yang bisa menghapus (ditangani oleh metode 'before')
-        return false;
+        return $user->hasRole('admin');
     }
 
     /**
      * Determine whether the user can restore the model.
      */
-    public function restore(User $user, Kegiatan $kegiatan = null): bool
+    public function restore(User $user, Kegiatan $kegiatan): bool
     {
-        return false;
+        return $user->hasRole('admin');
     }
 
     /**
      * Determine whether the user can permanently delete the model.
      */
-    public function forceDelete(User $user, Kegiatan $kegiatan = null): bool
+    public function forceDelete(User $user, Kegiatan $kegiatan): bool
     {
-        return false;
+        return $user->hasRole('admin');
     }
 }

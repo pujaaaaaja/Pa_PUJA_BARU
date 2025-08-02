@@ -3,18 +3,34 @@
 namespace App\Http\Controllers;
 
 use App\Enums\TahapanKegiatan;
-use App\Models\DokumentasiKegiatan;
 use App\Http\Requests\StoreDokumentasiKegiatanRequest;
-use App\Http\Requests\UpdateDokumentasiKegiatanRequest;
+use App\Http\Resources\KegiatanResource;
 use App\Models\Kegiatan;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+use Inertia\Inertia;
 
 class DokumentasiKegiatanController extends Controller
 {
     /**
-     * Store a new observation documentation resource in storage.
+     * Menampilkan form untuk membuat dokumentasi baru.
+     * Metode ini digunakan untuk menampilkan form pada tahapan yang sesuai.
+     */
+    public function create(Kegiatan $kegiatan)
+    {
+        // Otorisasi: Memastikan pengguna yang login boleh membuat dokumentasi untuk kegiatan ini.
+        $this->authorize('update', $kegiatan);
+
+        // Mengembalikan view Inertia dengan data kegiatan yang diperlukan.
+        return Inertia::render('Dokumentasi/Create', [
+            'kegiatan' => new KegiatanResource($kegiatan)
+        ]);
+    }
+
+    /**
+     * Menyimpan dokumentasi observasi baru.
      * Aksi untuk Pegawai.
      */
     public function storeObservasi(Request $request, Kegiatan $kegiatan)
@@ -29,15 +45,15 @@ class DokumentasiKegiatanController extends Controller
         $data = $request->validate([
             'catatan_kebutuhan' => 'required|string',
             'detail_pelaksanaan' => 'required|string',
-            'fotos.*' => 'required|file|image|max:2048', // Validasi untuk setiap file foto
-            // Tambahkan validasi untuk video jika perlu
+            'fotos' => 'required|array',
+            'fotos.*' => 'required|file|image|max:2048',
         ]);
 
         try {
             DB::beginTransaction();
 
-            // Buat entri dokumentasi utama
-            $dokumentasi = $kegiatan->dokumentasiKegiatans()->create([
+            // PERBAIKAN: Menggunakan nama relasi yang benar ('dokumentasi').
+            $dokumentasi = $kegiatan->dokumentasi()->create([
                 'user_id' => Auth::id(),
                 'tipe' => 'observasi',
                 'catatan_kebutuhan' => $data['catatan_kebutuhan'],
@@ -62,8 +78,6 @@ class DokumentasiKegiatanController extends Controller
 
             DB::commit();
 
-            // TODO: Kirim notifikasi ke Kabid bahwa observasi telah selesai
-
         } catch (\Exception $e) {
             DB::rollBack();
             return back()->with('error', 'Terjadi kesalahan saat menyimpan data: ' . $e->getMessage());
@@ -73,7 +87,7 @@ class DokumentasiKegiatanController extends Controller
     }
 
     /**
-     * Store a new handover documentation resource in storage.
+     * Menyimpan dokumentasi penyerahan baru.
      * Aksi untuk Pegawai.
      */
     public function storePenyerahan(Request $request, Kegiatan $kegiatan)
@@ -88,14 +102,15 @@ class DokumentasiKegiatanController extends Controller
         $data = $request->validate([
             'nama_dokumentasi' => 'required|string',
             'kontrak_path' => 'nullable|file|mimes:pdf,doc,docx|max:2048',
+            'fotos' => 'nullable|array',
             'fotos.*' => 'nullable|file|image|max:2048',
         ]);
 
         try {
             DB::beginTransaction();
 
-            // Buat entri dokumentasi utama
-            $dokumentasi = $kegiatan->dokumentasiKegiatans()->create([
+            // PERBAIKAN: Menggunakan nama relasi yang benar ('dokumentasi').
+            $dokumentasi = $kegiatan->dokumentasi()->create([
                 'user_id' => Auth::id(),
                 'tipe' => 'penyerahan',
                 'nama_dokumentasi' => $data['nama_dokumentasi'],
@@ -122,7 +137,7 @@ class DokumentasiKegiatanController extends Controller
                 }
             }
             
-            // Setelah dokumentasi penyerahan selesai, update tahapan kegiatan
+            // PERBAIKAN: Update tahapan ke 'Penyelesaian' setelah penyerahan.
             $kegiatan->tahapan = TahapanKegiatan::SELESAI;
             $kegiatan->save();
 
@@ -134,5 +149,14 @@ class DokumentasiKegiatanController extends Controller
         }
 
         return to_route('kegiatan.myIndex')->with('success', 'Dokumentasi penyerahan berhasil direkam. Kegiatan siap untuk diselesaikan.');
+    }
+
+    /**
+     * Metode ini bisa diimplementasikan jika ada kebutuhan untuk menyimpan
+     * dokumentasi secara umum, namun saat ini tidak digunakan dalam alur utama.
+     */
+    public function store(StoreDokumentasiKegiatanRequest $request)
+    {
+        // Logika untuk menyimpan dokumentasi umum bisa ditambahkan di sini.
     }
 }

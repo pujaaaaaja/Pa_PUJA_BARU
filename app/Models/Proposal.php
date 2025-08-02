@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne; // <-- Tambahkan ini
 
 class Proposal extends Model
 {
@@ -21,16 +22,19 @@ class Proposal extends Model
         'pengusul_id',
     ];
 
-    /**
-     * PERBAIKAN: Menambahkan definisi relasi 'pengusul'.
-     *
-     * Metode ini mendefinisikan bahwa sebuah Proposal 'milik' (belongs to)
-     * seorang User (sebagai pengusul).
-     *
-     * @return \Illuminate\Database\Eloquent\Relations\BelongsTo
-     */
     public function pengusul(): BelongsTo
     {
         return $this->belongsTo(User::class, 'pengusul_id');
+    }
+
+    /**
+     * PERBAIKAN: Menambahkan relasi ke Kegiatan.
+     * Sebuah proposal memiliki satu kegiatan.
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\HasOne
+     */
+    public function kegiatan(): HasOne
+    {
+        return $this->hasOne(Kegiatan::class);
     }
 }

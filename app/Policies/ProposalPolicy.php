@@ -21,8 +21,23 @@ class ProposalPolicy
      */
     public function view(User $user, Proposal $proposal): bool
     {
-        // Izinkan jika user adalah admin, kadis, atau pemilik proposal
-        return $user->hasRole(['admin', 'kadis']) || $user->id === $proposal->pengusul_id;
+        // 1. Izinkan jika user adalah admin, kadis, atau pemilik proposal
+        if ($user->hasRole(['admin', 'kadis']) || $user->id === $proposal->pengusul_id) {
+            return true;
+        }
+
+        // 2. PERBAIKAN: Izinkan pegawai jika mereka adalah anggota tim dari kegiatan terkait
+        if ($user->hasRole('pegawai')) {
+            // Memuat relasi kegiatan dari proposal
+            $kegiatan = $proposal->kegiatan;
+            
+            // Cek jika kegiatan ada dan user adalah anggota timnya
+            if ($kegiatan && $kegiatan->tim && $kegiatan->tim->pegawais->contains($user)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -38,17 +53,9 @@ class ProposalPolicy
      */
     public function update(User $user, Proposal $proposal = null): bool
     {
-        // PERBAIKAN: Argumen $proposal dibuat opsional untuk menangani
-        // pemeriksaan hak akses umum (misalnya dari UI) dan spesifik.
-
-        // Jika ini adalah pemeriksaan umum (tidak ada instance proposal spesifik),
-        // izinkan jika pengguna memiliki peran yang berpotensi bisa mengedit.
         if (is_null($proposal)) {
             return $user->hasRole(['kadis', 'pengusul', 'admin']);
         }
-
-        // Jika ini adalah pemeriksaan spesifik (ada instance proposal),
-        // terapkan logika otorisasi yang detail.
         return $user->hasRole('kadis') || $user->id === $proposal->pengusul_id;
     }
 

@@ -38,7 +38,6 @@ Route::middleware('auth')->group(function () {
 
     // --- Rute untuk Role: Pengusul ---
     Route::middleware(['role:pengusul|admin'])->group(function () {
-        // PERBAIKAN: Mengubah URI agar tidak konflik dengan rute resource admin.
         Route::get('/proposal-saya', [ProposalController::class, 'myProposals'])->name('proposal.myIndex');
         Route::get('/proposal/create', [ProposalController::class, 'create'])->name('proposal.create');
         Route::post('/proposal', [ProposalController::class, 'store'])->name('proposal.store');
@@ -63,6 +62,15 @@ Route::middleware('auth')->group(function () {
     // --- Rute untuk Role: Pegawai ---
     Route::middleware(['role:pegawai|admin'])->group(function () {
         Route::get('/kegiatan-saya', [KegiatanController::class, 'myIndex'])->name('kegiatan.myIndex');
+        Route::get('/kegiatan/{kegiatan}', [KegiatanController::class, 'show'])->name('kegiatan.show');
+        Route::patch('/kegiatan/{kegiatan}', [KegiatanController::class, 'update'])->name('kegiatan.update');
+        
+        // ======================= RUTE BARU DI SINI =======================
+        // Rute ini yang dicari oleh Ziggy di halaman Show.jsx.
+        // Ini akan mengarah ke halaman formulir untuk membuat dokumentasi baru.
+        Route::get('/dokumentasi-kegiatan/create/{kegiatan}', [DokumentasiKegiatanController::class, 'create'])->name('dokumentasi-kegiatan.create');
+        // =================================================================
+
         Route::post('/kegiatan/{kegiatan}/konfirmasi-kehadiran', [DokumentasiKegiatanController::class, 'confirmKehadiran'])->name('kegiatan.confirmKehadiran');
         
         Route::post('/dokumentasi-observasi/{kegiatan}', [DokumentasiKegiatanController::class, 'storeObservasi'])->name('dokumentasi.observasi.store');
@@ -74,9 +82,9 @@ Route::middleware('auth')->group(function () {
     // --- Rute Admin (CRUD Umum jika diperlukan) ---
     Route::middleware(['role:admin'])->group(function() {
         Route::resource('user', UserController::class);
-        // Rute ini sekarang tidak akan konflik lagi
         Route::resource('proposal', ProposalController::class)->except(['create', 'store']);
-        Route::resource('kegiatan', KegiatanController::class)->except(['create', 'store', 'myIndex']);
+        // Rute kegiatan untuk admin tidak lagi memerlukan show dan update karena sudah didefinisikan di grup pegawai.
+        Route::resource('kegiatan', KegiatanController::class)->except(['create', 'store', 'myIndex', 'show', 'update']);
     });
 });
 

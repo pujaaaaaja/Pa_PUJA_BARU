@@ -11,22 +11,22 @@ class Tim extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['nama_tim'];
+    protected $fillable = ['nama_tim', 'ketua_tim_id'];
 
     /**
-     * Relasi many-to-many antara Tim dan User (Pegawai).
+     * Mendefinisikan relasi many-to-many ke model User.
+     * Ini adalah relasi yang hilang dan menyebabkan error.
      *
      * @return \Illuminate\Database\Eloquent\Relations\BelongsToMany
      */
-    public function pegawais(): BelongsToMany
+    public function users(): BelongsToMany
     {
-        // Mendefinisikan bahwa sebuah Tim memiliki banyak User (pegawai)
-        // melalui tabel pivot 'pegawai_tim'.
-        return $this->belongsToMany(User::class, 'pegawai_tim', 'tim_id', 'user_id');
+        // Argumen kedua adalah nama tabel pivot (junction table).
+        return $this->belongsToMany(User::class, 'pegawai_tim');
     }
 
     /**
-     * Relasi one-to-many antara Tim dan Kegiatan.
+     * Relasi untuk mendapatkan daftar kegiatan yang ditangani oleh tim ini.
      *
      * @return \Illuminate\Database\Eloquent\Relations\HasMany
      */

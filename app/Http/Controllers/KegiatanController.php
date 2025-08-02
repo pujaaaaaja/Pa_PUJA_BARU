@@ -47,7 +47,6 @@ class KegiatanController extends Controller
 
     /**
      * Show the form for creating a new resource.
-     * Aksi untuk Kabid.
      */
     public function create()
     {
@@ -64,16 +63,14 @@ class KegiatanController extends Controller
 
     /**
      * Store a newly created resource in storage.
-     * Aksi untuk Kabid.
      */
     public function store(StoreKegiatanRequest $request)
     {
         $this->authorize('create', Kegiatan::class);
         $data = $request->validated();
 
-        // PERBAIKAN: Menambahkan ID pengguna yang sedang login (Kabid) sebagai 'created_by'.
         $data['created_by'] = Auth::id();
-        $data['tahapan'] = 'Perjalanan Dinas'; // Menetapkan tahapan awal
+        $data['tahapan'] = 'Perjalanan Dinas';
 
         $sktl = $data['sktl_path'] ?? null;
         if ($sktl) {
@@ -91,8 +88,13 @@ class KegiatanController extends Controller
     public function show(Kegiatan $kegiatan)
     {
         $this->authorize('view', $kegiatan);
+
+        // PERBAIKAN: Tambahkan 'tim.pegawais' untuk memuat daftar anggota tim.
+        // Ini akan mengatasi error 'map' di frontend.
+        $kegiatan->load(['proposal', 'tim.pegawais', 'createdBy', 'dokumentasi.fotos', 'beritaAcara']);
+
         return Inertia::render('Kegiatan/Show', [
-            'kegiatan' => new KegiatanResource($kegiatan->load(['proposal', 'tim', 'createdBy', 'dokumentasi.fotos', 'beritaAcara']))
+            'kegiatan' => new KegiatanResource($kegiatan)
         ]);
     }
 
@@ -155,10 +157,11 @@ class KegiatanController extends Controller
 
     /**
      * Display a listing of the kegiatans for the current user.
-     * Aksi untuk Pegawai.
      */
     public function myIndex()
     {
+        $this->authorize('viewMyIndex', Kegiatan::class);
+
         $user = Auth::user();
         $query = Kegiatan::query()
             ->whereHas('tim.pegawais', function ($q) use ($user) {
