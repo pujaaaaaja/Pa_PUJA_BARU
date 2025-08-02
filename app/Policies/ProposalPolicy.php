@@ -9,24 +9,11 @@ use Illuminate\Auth\Access\Response;
 class ProposalPolicy
 {
     /**
-     * Perform pre-authorization checks.
-     */
-    public function before(User $user, string $ability): bool|null
-    {
-        if ($user->hasRole('admin')) {
-            return true;
-        }
-
-        return null;
-    }
-
-    /**
      * Determine whether the user can view any models.
      */
     public function viewAny(User $user): bool
     {
-        // Kadis dan Admin bisa melihat semua proposal
-        return $user->hasAnyRole(['kadis', 'admin']);
+        return $user->hasRole(['admin', 'kadis']);
     }
 
     /**
@@ -34,12 +21,8 @@ class ProposalPolicy
      */
     public function view(User $user, Proposal $proposal): bool
     {
-        // Kadis/Admin bisa melihat proposal manapun.
-        if ($user->hasAnyRole(['kadis', 'admin'])) {
-            return true;
-        }
-        // Pengusul hanya bisa melihat proposal miliknya sendiri.
-        return $user->id === $proposal->pengusul_id;
+        // Izinkan jika user adalah admin, kadis, atau pemilik proposal
+        return $user->hasRole(['admin', 'kadis']) || $user->id === $proposal->pengusul_id;
     }
 
     /**
@@ -47,24 +30,26 @@ class ProposalPolicy
      */
     public function create(User $user): bool
     {
-        // Hanya Pengusul yang bisa membuat proposal.
         return $user->hasRole('pengusul');
     }
 
     /**
      * Determine whether the user can update the model.
-     * * @param \App\Models\User $user
-     * @param \App\Models\Proposal|null $proposal
-     * @return bool
      */
     public function update(User $user, Proposal $proposal = null): bool
     {
-        // Hanya Kadis yang bisa melakukan verifikasi (update status).
-        if ($user->hasRole('kadis')) {
-            return true;
+        // PERBAIKAN: Argumen $proposal dibuat opsional untuk menangani
+        // pemeriksaan hak akses umum (misalnya dari UI) dan spesifik.
+
+        // Jika ini adalah pemeriksaan umum (tidak ada instance proposal spesifik),
+        // izinkan jika pengguna memiliki peran yang berpotensi bisa mengedit.
+        if (is_null($proposal)) {
+            return $user->hasRole(['kadis', 'pengusul', 'admin']);
         }
-        
-        return false;
+
+        // Jika ini adalah pemeriksaan spesifik (ada instance proposal),
+        // terapkan logika otorisasi yang detail.
+        return $user->hasRole('kadis') || $user->id === $proposal->pengusul_id;
     }
 
     /**
@@ -72,7 +57,22 @@ class ProposalPolicy
      */
     public function delete(User $user, Proposal $proposal): bool
     {
-        // Hanya admin yang bisa menghapus
-        return false;
+        return $user->hasRole('admin');
+    }
+
+    /**
+     * Determine whether the user can restore the model.
+     */
+    public function restore(User $user, Proposal $proposal): bool
+    {
+        return $user->hasRole('admin');
+    }
+
+    /**
+     * Determine whether the user can permanently delete the model.
+     */
+    public function forceDelete(User $user, Proposal $proposal): bool
+    {
+        return $user->hasRole('admin');
     }
 }

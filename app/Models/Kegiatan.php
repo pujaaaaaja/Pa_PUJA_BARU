@@ -2,45 +2,26 @@
 
 namespace App\Models;
 
-use App\Enums\TahapanKegiatan;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Kegiatan extends Model
 {
     use HasFactory;
 
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var array<int, string>
-     */
     protected $fillable = [
         'nama_kegiatan',
-        'deskripsi_kegiatan',
         'tanggal_kegiatan',
         'sktl_path',
+        'sktl_penyerahan_path',
         'proposal_id',
         'tim_id',
-        'created_by',
+        'status_kegiatan',
         'tahapan',
-        'tanggal_penyerahan',
-        'sktl_penyerahan_path',
-        'status_akhir', // Ditambahkan untuk status final
-    ];
-
-    /**
-     * The attributes that should be cast.
-     *
-     * @var array<string, string>
-     */
-    protected $casts = [
-        'tahapan' => TahapanKegiatan::class,
-        'tanggal_kegiatan' => 'date',
-        'tanggal_penyerahan' => 'date',
-        // 'status_akhir' => StatusKegiatan::class, // Rekomendasi: Gunakan Enum untuk status_akhir
+        'created_by', // PERBAIKAN: Menambahkan 'created_by' ke dalam $fillable.
     ];
 
     public function proposal(): BelongsTo
@@ -53,18 +34,18 @@ class Kegiatan extends Model
         return $this->belongsTo(Tim::class);
     }
 
-    public function createdBy(): BelongsTo
-    {
-        return $this->belongsTo(User::class, 'created_by');
-    }
-
-    public function dokumentasiKegiatans(): HasMany
+    public function dokumentasi(): HasMany
     {
         return $this->hasMany(DokumentasiKegiatan::class);
     }
 
-    public function beritaAcaras(): HasMany
+    public function beritaAcara(): HasOne
     {
-        return $this->hasMany(BeritaAcara::class);
+        return $this->hasOne(BeritaAcara::class);
+    }
+
+    public function createdBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
     }
 }

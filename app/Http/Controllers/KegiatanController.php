@@ -2,15 +2,17 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Resources\KegiatanResource;
 use App\Models\Kegiatan;
 use App\Http\Requests\StoreKegiatanRequest;
 use App\Http\Requests\UpdateKegiatanRequest;
+use App\Http\Resources\KegiatanResource;
+use App\Http\Resources\ProposalResource;
+use App\Http\Resources\TimResource;
 use App\Models\Proposal;
 use App\Models\Tim;
-use Illuminate\Http\Request;
-// 1. Import Auth facade
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage;
+use Inertia\Inertia;
 
 class KegiatanController extends Controller
 {
@@ -19,7 +21,8 @@ class KegiatanController extends Controller
      */
     public function index()
     {
-        $query = Kegiatan::query();
+        $this->authorize('viewAny', Kegiatan::class);
+        $query = Kegiatan::query()->with(['proposal', 'tim', 'createdBy']);
 
         $sortField = request("sort_field", 'created_at');
         $sortDirection = request("sort_direction", "desc");
@@ -27,16 +30,16 @@ class KegiatanController extends Controller
         if (request("nama_kegiatan")) {
             $query->where("nama_kegiatan", "like", "%" . request("nama_kegiatan") . "%");
         }
-        if (request("status")) {
-            $query->where("status", request("status"));
+        if (request("status_kegiatan")) {
+            $query->where("status_kegiatan", request("status_kegiatan"));
         }
 
         $kegiatans = $query->orderBy($sortField, $sortDirection)
             ->paginate(10)
             ->onEachSide(1);
 
-        return inertia("Kegiatan/Index", [
-            "kegiatans" => KegiatanResource::collection($kegiatans),
+        return Inertia::render('Kegiatan/Index', [
+            'kegiatans' => KegiatanResource::collection($kegiatans),
             'queryParams' => request()->query() ?: null,
             'success' => session('success'),
         ]);
@@ -44,23 +47,42 @@ class KegiatanController extends Controller
 
     /**
      * Show the form for creating a new resource.
+     * Aksi untuk Kabid.
      */
     public function create()
     {
+        $this->authorize('create', Kegiatan::class);
+
         $proposals = Proposal::where('status', 'disetujui')->get();
         $tims = Tim::all();
-        return inertia("Kegiatan/Create", compact('proposals', 'tims'));
+
+        return Inertia::render('Kegiatan/Create', [
+            'proposals' => ProposalResource::collection($proposals),
+            'tims' => TimResource::collection($tims),
+        ]);
     }
 
     /**
      * Store a newly created resource in storage.
+     * Aksi untuk Kabid.
      */
     public function store(StoreKegiatanRequest $request)
     {
+        $this->authorize('create', Kegiatan::class);
         $data = $request->validated();
+
+        // PERBAIKAN: Menambahkan ID pengguna yang sedang login (Kabid) sebagai 'created_by'.
+        $data['created_by'] = Auth::id();
+        $data['tahapan'] = 'Perjalanan Dinas'; // Menetapkan tahapan awal
+
+        $sktl = $data['sktl_path'] ?? null;
+        if ($sktl) {
+            $data['sktl_path'] = $sktl->store('kegiatan_sktl', 'public');
+        }
+
         Kegiatan::create($data);
 
-        return to_route('kegiatan.index')->with('success', 'Kegiatan berhasil ditambahkan');
+        return to_route('dashboard')->with('success', 'Kegiatan berhasil dibuat dan tugas telah diberikan kepada tim.');
     }
 
     /**
@@ -68,8 +90,9 @@ class KegiatanController extends Controller
      */
     public function show(Kegiatan $kegiatan)
     {
-        return inertia('Kegiatan/Show', [
-            'kegiatan' => new KegiatanResource($kegiatan),
+        $this->authorize('view', $kegiatan);
+        return Inertia::render('Kegiatan/Show', [
+            'kegiatan' => new KegiatanResource($kegiatan->load(['proposal', 'tim', 'createdBy', 'dokumentasi.fotos', 'beritaAcara']))
         ]);
     }
 
@@ -78,9 +101,15 @@ class KegiatanController extends Controller
      */
     public function edit(Kegiatan $kegiatan)
     {
+        $this->authorize('update', $kegiatan);
         $proposals = Proposal::where('status', 'disetujui')->get();
         $tims = Tim::all();
-        return inertia("Kegiatan/Edit", compact('kegiatan', 'proposals', 'tims'));
+
+        return Inertia::render('Kegiatan/Edit', [
+            'kegiatan' => new KegiatanResource($kegiatan),
+            'proposals' => ProposalResource::collection($proposals),
+            'tims' => TimResource::collection($tims),
+        ]);
     }
 
     /**
@@ -88,10 +117,20 @@ class KegiatanController extends Controller
      */
     public function update(UpdateKegiatanRequest $request, Kegiatan $kegiatan)
     {
+        $this->authorize('update', $kegiatan);
         $data = $request->validated();
+
+        $sktl = $data['sktl_path'] ?? null;
+        if ($sktl && $request->hasFile('sktl_path')) {
+            if ($kegiatan->sktl_path) {
+                Storage::disk('public')->delete($kegiatan->sktl_path);
+            }
+            $data['sktl_path'] = $sktl->store('kegiatan_sktl', 'public');
+        }
+
         $kegiatan->update($data);
 
-        return to_route('kegiatan.index')->with('success', "Kegiatan \"$kegiatan->nama_kegiatan\" berhasil diupdate");
+        return to_route('kegiatan.index')->with('success', 'Kegiatan berhasil diperbarui.');
     }
 
     /**
@@ -99,36 +138,38 @@ class KegiatanController extends Controller
      */
     public function destroy(Kegiatan $kegiatan)
     {
+        $this->authorize('delete', $kegiatan);
         $nama_kegiatan = $kegiatan->nama_kegiatan;
+        
+        if ($kegiatan->sktl_path) {
+            Storage::disk('public')->delete($kegiatan->sktl_path);
+        }
+        if ($kegiatan->sktl_penyerahan_path) {
+            Storage::disk('public')->delete($kegiatan->sktl_penyerahan_path);
+        }
+
         $kegiatan->delete();
-        return to_route('kegiatan.index')->with('success', "Kegiatan \"$nama_kegiatan\" berhasil dihapus");
+        
+        return to_route('kegiatan.index')->with('success', "Kegiatan \"$nama_kegiatan\" berhasil dihapus.");
     }
 
+    /**
+     * Display a listing of the kegiatans for the current user.
+     * Aksi untuk Pegawai.
+     */
     public function myIndex()
     {
-        // 2. Ganti auth()->user() dengan Auth::user()
         $user = Auth::user();
-        $query = Kegiatan::query()->whereHas('tim.users', function ($q) use ($user) {
-            $q->where('user_id', $user->id);
-        });
+        $query = Kegiatan::query()
+            ->whereHas('tim.pegawais', function ($q) use ($user) {
+                $q->where('user_id', $user->id);
+            })
+            ->with(['proposal', 'tim']);
 
-        $sortField = request("sort_field", 'created_at');
-        $sortDirection = request("sort_direction", "desc");
+        $kegiatans = $query->orderBy('tanggal_kegiatan', 'desc')->paginate(10);
 
-        if (request("nama_kegiatan")) {
-            $query->where("nama_kegiatan", "like", "%" . request("nama_kegiatan") . "%");
-        }
-        if (request("status")) {
-            $query->where("status", request("status"));
-        }
-
-        $kegiatans = $query->orderBy($sortField, $sortDirection)
-            ->paginate(10)
-            ->onEachSide(1);
-
-        return inertia("Kegiatan/MyIndex", [
-            "kegiatans" => KegiatanResource::collection($kegiatans),
-            'queryParams' => request()->query() ?: null,
+        return Inertia::render('Kegiatan/MyIndex', [
+            'kegiatans' => KegiatanResource::collection($kegiatans),
             'success' => session('success'),
         ]);
     }

@@ -3,7 +3,6 @@
 namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Support\Facades\Auth;
 
 class StoreProposalRequest extends FormRequest
 {
@@ -12,8 +11,10 @@ class StoreProposalRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        // Izinkan jika user yang login adalah pengusul
-        return Auth::check() && Auth::user()->role === 'pengusul';
+        // PERBAIKAN: Ubah dari false menjadi true.
+        // Ini mengizinkan request untuk melanjutkan ke controller,
+        // di mana otorisasi yang lebih spesifik akan ditangani oleh policy.
+        return true;
     }
 
     /**
@@ -24,10 +25,11 @@ class StoreProposalRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'nama_proposal' => 'required|string|max:255',
-            'tanggal_pengajuan' => 'required|date',
-            // Validasi untuk file: wajib ada, tipe pdf/doc/docx, maks 2MB
-            'file_path' => 'required|file|mimes:pdf,doc,docx|max:2048',
+            'nama_proposal' => ['required', 'string', 'max:255'],
+            'deskripsi' => ['required', 'string'],
+            'tujuan' => ['required', 'string'],
+            'tanggal_pengajuan' => ['required', 'date'],
+            'dokumen_path' => ['nullable', 'file', 'mimes:pdf,doc,docx', 'max:2048'],
         ];
     }
 }
