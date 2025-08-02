@@ -33,7 +33,7 @@ class DashboardController extends Controller
             
             // PERBAIKAN: Mengubah query untuk mencari kegiatan berdasarkan user_id di dalam relasi 'tim'.
             // Tabel 'kegiatans' tidak memiliki 'user_id', tetapi tabel 'tims' memilikinya.
-            $stats['kegiatan_dibuat'] = Kegiatan::whereHas('tim', function ($query) use ($user) {
+            $stats['kegiatan_dibuat'] = Kegiatan::whereHas('tim.users', function ($query) use ($user) {
                 $query->where('user_id', $user->id);
             })->count();
 
@@ -43,10 +43,10 @@ class DashboardController extends Controller
             $stats['proposal_ditolak'] = Proposal::where('user_id', $user->id)->where('status', 'ditolak')->count();
         } elseif ($user->role === 'pegawai') {
             $stats['tugas_aktif'] = Kegiatan::where('tahapan', '!=', 'selesai')
-                ->whereHas('tim.pegawai', fn($q) => $q->where('user_id', $user->id))
+                ->whereHas('tim.users', fn($q) => $q->where('user_id', $user->id))
                 ->count();
             $stats['tugas_selesai'] = Kegiatan::where('tahapan', 'selesai')
-                ->whereHas('tim.pegawai', fn($q) => $q->where('user_id', $user->id))
+                ->whereHas('tim.users', fn($q) => $q->where('user_id', $user->id))
                 ->count();
         }
 

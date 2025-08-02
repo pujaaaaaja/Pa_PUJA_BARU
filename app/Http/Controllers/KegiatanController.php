@@ -24,7 +24,7 @@ class KegiatanController extends Controller
         $user = Auth::user();
 
         // Query dasar untuk mengambil kegiatan yang terkait dengan user yang login
-        $query = Kegiatan::whereHas('tim.pegawai', function ($q) use ($user) {
+        $query = Kegiatan::whereHas('tim.users', function ($q) use ($user) {
             $q->where('user_id', $user->id);
         })->with(['proposal', 'tim']);
 
